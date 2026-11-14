@@ -87,7 +87,7 @@ static inline u32 nvgpu_rmalloc_class_param_size(u32 hClass)
     case 0xc4b0: return   12;  /* NVC4B0_VIDEO_DECODER (NV_BSP_ALLOCATION_PARAMETERS) optional */
     case 0xc4b7: return   12;  /* NVC4B7_VIDEO_ENCODER (NV_MSENC_ALLOCATION_PARAMETERS) optional */
     case 0xc4d1: return   12;  /* NVC4D1_VIDEO_NVJPG (NV_NVJPG_ALLOCATION_PARAMETERS) optional */
-    case 0xc56f: return  368;  /* AMPERE_CHANNEL_GPFIFO_A (NV_CHANNEL_ALLOC_PARAMS) required */
+    case 0xc56f: return  376;  /* AMPERE_CHANNEL_GPFIFO_A (NV_CHANNEL_ALLOC_PARAMS) required */
     case 0xc574: return    8;  /* UVM_CHANNEL_RETAINER (NV_UVM_CHANNEL_RETAINER_ALLOC_PARAMS) required */
     case 0xc57a: return   16;  /* NVC57A_CURSOR_IMM_CHANNEL_PIO (NV50VAIO_CHANNELPIO_ALLOCATION_PARAMETERS) required */
     case 0xc57b: return   40;  /* NVC57B_WINDOW_IMM_CHANNEL_DMA (NV50VAIO_CHANNELDMA_ALLOCATION_PARAMETERS) required */
