@@ -2721,7 +2721,7 @@ static const struct file_operations nvgpu_uvm_fops = {
 /* ───────── nvidia-modeset ioctl (/dev/nvidia-modeset, ioc_type 0x6d) ─────── Outer struct (16 bytes): u32 cmd — modeset sub-command u32 dataSize — bytes pointed to by pData u64 pData — USERSPACE pointer to the actual data buffer Same 2-level serialisation pattern as RM_CONTROL/RM_ALLOC. */
 
 /* NvKmsIoctlCommand: the one that names memory by a descriptor. */
-#define NVGPU_NVKMS_REGISTER_SURFACE 16
+#define NVGPU_NVKMS_REGISTER_SURFACE 17
 /* Byte offset of planes[0].u inside NvKmsRegisterSurfaceRequest. */
 #define NVGPU_NVKMS_SURFACE_FD_OFFSET 16
 
