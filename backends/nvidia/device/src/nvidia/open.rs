@@ -61,7 +61,7 @@ impl NvidiaBackend {
         }
         // The guest may wait on this descriptor, and only the host's copy ever becomes readable.
         self.watch_added.push((guest_handle as u32, raw_fd));
-        log::debug!("open {:?} -> handle={guest_handle} (fd={raw_fd})", path);
+        log::info!("open {:?} -> handle={guest_handle} (fd={raw_fd})", path);
 
         // The handle is returned in the header.
         self.write_hdr(resp_buf, guest_handle as u32, 0)
@@ -109,7 +109,7 @@ impl NvidiaBackend {
 
         match self.handles.remove(handle) {
             Ok(()) => {
-                log::debug!("close handle={handle}");
+                log::info!("close handle={handle}");
                 self.watch_removed.push(handle as u32);
                 self.write_hdr(resp_buf, 0, 0)
             }

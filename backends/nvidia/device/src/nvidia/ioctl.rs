@@ -204,7 +204,70 @@ impl NvidiaBackend {
         self.vidmem_note(payload, &mut resp_buf[..n]);
         self.note_clients(payload, &resp_buf[..n]);
         self.note_registrations(payload, &resp_buf[..n]);
+        self.note_alloc_status(payload, &resp_buf[..n]);
         n
+    }
+
+    /// Record what RM answered for an allocation. A refusal here is silent at the syscall level: the ioctl succeeds and the status travels inside the parameters.
+    fn note_alloc_status(&mut self, payload: &[u8], resp: &[u8]) {
+        let req = read_struct::<IoctlReq>(payload, 0);
+        let request = req.cmd as u64;
+        if (request >> 8) & 0xFF != u64::from(b'F') || request & 0xFF != 0x2b {
+            return;
+        }
+        let head = size_of::<MsgHeader>() + size_of::<IoctlResp>();
+        if resp.len() < head + NVOS64_STATUS + 4 || read_struct::<MsgHeader>(resp, 0).status != 0 {
+            return;
+        }
+        let out = &resp[head..];
+        let status = u32::from_le_bytes(out[NVOS64_STATUS..NVOS64_STATUS + 4].try_into().unwrap());
+        let body = &payload[size_of::<IoctlReq>()..];
+        if body.len() < 16 {
+            return;
+        }
+        let class = u32::from_le_bytes(body[12..16].try_into().unwrap());
+        let root = u32::from_le_bytes(body[0..4].try_into().unwrap());
+        let parent = u32::from_le_bytes(body[4..8].try_into().unwrap());
+        let new = u32::from_le_bytes(body[8..12].try_into().unwrap());
+        // What RM says the object handle is, which is not always what was asked for.
+        let resp_new = if out.len() >= 12 {
+            u32::from_le_bytes(out[8..12].try_into().unwrap())
+        } else {
+            new
+        };
+        let kind = self
+            .handle_kinds
+            .get(&(self.current_handle as u64))
+            .map(|k| format!("{k:?}"))
+            .unwrap_or_else(|| "?".into());
+        let count = self.alloc_status.entry((class, status)).or_insert(0);
+        *count += 1;
+        // The first words of the parameter block, so a refusal can be read against what RM was sent.
+        let nested_at = size_of::<IoctlReq>() + req.data_len as usize;
+        let tail = &payload[nested_at..];
+        let n = (req.nested_len as usize).min(tail.len());
+        let w = |i: usize| {
+            if n >= i + 4 {
+                u32::from_le_bytes(tail[i..i + 4].try_into().unwrap())
+            } else {
+                0
+            }
+        };
+        log::info!(
+            "RM_ALLOC class {class:#06x} status {status:#x}: root={root} parent={parent} \
+             new={new} nested={} params={:#010x} {:#010x} {:#010x} {:#010x} on file {} ({kind})",
+            req.nested_len,
+            w(0),
+            w(4),
+            w(8),
+            w(12),
+            self.current_handle
+        );
+        if resp_new != new && status == NV_OK {
+            log::info!(
+                "RM_ALLOC class {class:#06x}: requested new={new:#010x}, RM assigned {resp_new:#010x}"
+            );
+        }
     }
 
     /// Release the guest memory a freed object had registered.
@@ -259,6 +322,7 @@ impl NvidiaBackend {
             }
             // NVOS00: hRoot, hObjectParent, hObjectOld, status.
             (0x29, n) if n >= 16 && word(12) == NV_OK && word(8) == word(0) => {
+                log::info!("RM_FREE object={:#010x} on file {}", word(8), file);
                 self.vram.client_freed(word(0));
             }
             _ => {}
