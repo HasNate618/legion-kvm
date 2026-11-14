@@ -19,7 +19,42 @@ pub fn host_topology() -> Result<Topology> {
 pub fn boot_cpu() -> Result<String> {
     let info =
         std::fs::read_to_string("/proc/cpuinfo").context("read host topology capabilities")?;
-    Ok(boot_cpu_for_info(&info))
+    Ok(format!(
+        "{}{}",
+        boot_cpu_for_info(&info),
+        target_overrides()
+    ))
+}
+
+/// `TARGET` expressed as QEMU `-cpu` property overrides.
+///
+/// The guest has to answer the packed binary's CPUID handshake itself, and it can
+/// only do that from the kernel, so the identity has to be in the vCPU from boot
+/// rather than spoofed per process. Decode the signature back into the family,
+/// model and stepping fields QEMU re-encodes into leaf 1.
+fn target_overrides() -> String {
+    let signature = TARGET.signature;
+    let stepping = signature & 0xf;
+    let base_model = (signature >> 4) & 0xf;
+    let base_family = (signature >> 8) & 0xf;
+    let ext_model = (signature >> 16) & 0xf;
+    let ext_family = (signature >> 20) & 0xff;
+
+    let family = if base_family == 0xf {
+        base_family + ext_family
+    } else {
+        base_family
+    };
+    let model = if base_family == 0x6 || base_family == 0xf {
+        (ext_model << 4) | base_model
+    } else {
+        base_model
+    };
+
+    format!(
+        ",vendor={},family={:#x},model={:#x},stepping={}",
+        TARGET.vendor, family, model, stepping
+    )
 }
 
 fn boot_cpu_for_info(info: &str) -> String {
@@ -71,7 +106,11 @@ pub const BOOT_CPU: &str = concat!(
     ",-avx512bw,-avx512vl,-avx512vbmi,-avx512vbmi2,-avx512vnni",
     ",-avx512bitalg,-avx512-vpopcntdq,-avx512-vp2intersect",
     ",-avx512-bf16,-avx512-fp16,-avx512-4vnniw,-avx512-4fmaps",
-    ",-pku,-amx-tile",
+    ",-pku,-amx-tile,-x2apic",
+    // Guest reports AuthenticAMD, so the kernel encodes paravirt hypercalls with
+    // AMD's VMMCALL. The host is Intel, so those trap as #UD: drop the features
+    // that issue them and let IPIs go through the APIC.
+    ",-kvm-pv-ipi,-kvm-pv-sched-yield,-kvm-pv-tlb-flush,-kvm-pv-unhalt,-kvm-asyncpf",
 );
 
 #[cfg(test)]
