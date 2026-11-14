@@ -105,7 +105,7 @@ impl Config {
     }
 
     pub fn timeout_seconds(&self) -> u64 {
-        30 + self
+        300 + self
             .warmup_ms
             .saturating_add(self.sample_ms)
             .saturating_mul(self.cases.len() as u64)
