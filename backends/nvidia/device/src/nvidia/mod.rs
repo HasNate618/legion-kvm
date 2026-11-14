@@ -214,7 +214,7 @@ struct LiveMap {
 }
 
 /// `NvKmsIoctlCommand::NVKMS_IOCTL_REGISTER_SURFACE`, the one that names the memory it registers by a file descriptor.
-const NVKMS_REGISTER_SURFACE: u32 = 16;
+const NVKMS_REGISTER_SURFACE: u32 = 17;
 /// Byte offset of `planes[0].u` inside `NvKmsRegisterSurfaceRequest`.
 const NVKMS_SURFACE_FD_OFFSET: usize = 16;
 
