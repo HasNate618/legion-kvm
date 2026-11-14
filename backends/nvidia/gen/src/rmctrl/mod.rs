@@ -4,6 +4,7 @@ pub mod v535_129_03;
 pub mod v580_178_04;
 pub mod v595_104_02;
 pub mod v595_71_05;
+pub mod v610_57_04;
 pub mod v615_71_09;
 pub mod v615_78_08;
 
@@ -105,6 +106,10 @@ static PROFILES: &[Profile] = &[
     Profile {
         version: DriverVersion::new(595, 104, 2),
         table: || v595_104_02::TABLE,
+    },
+    Profile {
+        version: DriverVersion::new(610, 57, 4),
+        table: || v610_57_04::TABLE,
     },
     Profile {
         version: DriverVersion::new(615, 71, 9),

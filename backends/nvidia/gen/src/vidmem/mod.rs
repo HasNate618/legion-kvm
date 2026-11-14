@@ -4,6 +4,7 @@ pub mod v535_129_03;
 pub mod v580_178_04;
 pub mod v595_104_02;
 pub mod v595_71_05;
+pub mod v610_57_04;
 pub mod v615_71_09;
 pub mod v615_78_08;
 
@@ -134,6 +135,7 @@ static PROFILES: &[(DriverVersion, &Layout)] = &[
     (DriverVersion::new(580, 178, 4), &v580_178_04::LAYOUT),
     (DriverVersion::new(595, 71, 5), &v595_71_05::LAYOUT),
     (DriverVersion::new(595, 104, 2), &v595_104_02::LAYOUT),
+    (DriverVersion::new(610, 57, 4), &v610_57_04::LAYOUT),
     (DriverVersion::new(615, 71, 9), &v615_71_09::LAYOUT),
     (DriverVersion::new(615, 78, 8), &v615_78_08::LAYOUT),
 ];

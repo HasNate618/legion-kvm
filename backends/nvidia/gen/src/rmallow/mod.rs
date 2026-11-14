@@ -4,6 +4,7 @@ pub mod v535_129_03;
 pub mod v580_178_04;
 pub mod v595_104_02;
 pub mod v595_71_05;
+pub mod v610_57_04;
 pub mod v615_71_09;
 pub mod v615_78_08;
 
@@ -187,6 +188,14 @@ static PROFILES: &[Profile] = &[
         deprec: || v595_104_02::DEPREC,
         catch_all: || v595_104_02::CATCH_ALL,
         gss: || v595_104_02::GSS,
+    },
+    Profile {
+        version: DriverVersion::new(610, 57, 4),
+        ctrl: || v610_57_04::CTRL,
+        class: || v610_57_04::CLASS,
+        deprec: || v610_57_04::DEPREC,
+        catch_all: || v610_57_04::CATCH_ALL,
+        gss: || v610_57_04::GSS,
     },
     Profile {
         version: DriverVersion::new(615, 71, 9),
