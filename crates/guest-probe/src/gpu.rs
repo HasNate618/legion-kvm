@@ -497,7 +497,9 @@ fn run_vulkan_program(program: &str, args: &[&str], name: &str) -> Result<Value>
         File::open(path)?.take(64 * 1024).read_to_end(&mut bytes)?;
         Ok(String::from_utf8_lossy(&bytes).into_owned())
     };
-    let kernel_messages = if status.signal().is_some() {
+    // Always capture the ring: the driver reports device loss through NVRM messages
+    // and then exits normally, so a signal is not the interesting case.
+    let kernel_messages = {
         let mut bytes = vec![0_u8; 64 * 1024];
         // SAFETY: SYSLOG_ACTION_READ_ALL writes at most the allocated buffer length.
         let length = unsafe { libc::klogctl(3, bytes.as_mut_ptr().cast(), 65536) };
@@ -506,12 +508,116 @@ fn run_vulkan_program(program: &str, args: &[&str], name: &str) -> Result<Value>
         } else {
             String::new()
         }
-    } else {
-        String::new()
     };
     Ok(
-        json!({"success": status.success(), "exit_code": status.code(), "signal": status.signal(), "stdout": read(&stdout)?, "stderr": read(&stderr)?, "kernel_messages": kernel_messages}),
+        json!({"success": status.success(), "exit_code": status.code(), "signal": status.signal(), "stdout": read(&stdout)?, "stderr": read(&stderr)?, "kernel_messages": kernel_messages, "driver_view": driver_view(), "nvml": nvml_view()}),
     )
+}
+
+/// Ask NVML what userspace RM thinks of the GPU. A device-loss verdict shows up here
+/// as a return code, which is the one place it can be read without driver logging.
+fn nvml_view() -> Value {
+    #[repr(C)]
+    struct Memory {
+        total: u64,
+        free: u64,
+        used: u64,
+    }
+    unsafe {
+        let mut handle = libc::dlopen(c"libnvidia-ml.so.1".as_ptr(), libc::RTLD_NOW);
+        if handle.is_null() {
+            handle = libc::dlopen(c"/usr/lib/libnvidia-ml.so.1".as_ptr(), libc::RTLD_NOW);
+        }
+        if handle.is_null() {
+            let libs = fs::read_dir("/usr/lib")
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                        .filter(|name| name.contains("nvidia"))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            return json!({"loaded": false, "error": "libnvidia-ml.so.1 did not load", "usr_lib_nvidia": libs});
+        }
+        let sym = |name: &std::ffi::CStr| libc::dlsym(handle, name.as_ptr());
+        let init: extern "C" fn() -> i32 = std::mem::transmute(sym(c"nvmlInit_v2"));
+        let count_devices: extern "C" fn(*mut u32) -> i32 =
+            std::mem::transmute(sym(c"nvmlDeviceGetCount_v2"));
+        let by_index: extern "C" fn(u32, *mut *mut std::ffi::c_void) -> i32 =
+            std::mem::transmute(sym(c"nvmlDeviceGetHandleByIndex_v2"));
+        let get_name: extern "C" fn(*mut std::ffi::c_void, *mut u8, u32) -> i32 =
+            std::mem::transmute(sym(c"nvmlDeviceGetName"));
+        let get_memory: extern "C" fn(*mut std::ffi::c_void, *mut Memory) -> i32 =
+            std::mem::transmute(sym(c"nvmlDeviceGetMemoryInfo"));
+
+        let mut count = 0_u32;
+        let init_rc = init();
+        let count_rc = if init_rc == 0 { count_devices(&mut count) } else { -1 };
+        let mut device: *mut std::ffi::c_void = std::ptr::null_mut();
+        let handle_rc = if count_rc == 0 && count > 0 {
+            by_index(0, &mut device)
+        } else {
+            -1
+        };
+        let mut name = [0_u8; 96];
+        let name_rc = if handle_rc == 0 {
+            get_name(device, name.as_mut_ptr(), name.len() as u32)
+        } else {
+            -1
+        };
+        let mut memory = Memory { total: 0, free: 0, used: 0 };
+        let memory_rc = if handle_rc == 0 {
+            get_memory(device, &mut memory)
+        } else {
+            -1
+        };
+        json!({
+            "loaded": true,
+            "init": init_rc,
+            "count_rc": count_rc,
+            "count": count,
+            "handle_rc": handle_rc,
+            "name_rc": name_rc,
+            "name": String::from_utf8_lossy(&name).trim_end_matches('\0').to_owned(),
+            "memory_rc": memory_rc,
+            "total_mib": memory.total / (1024 * 1024),
+            "used_mib": memory.used / (1024 * 1024),
+        })
+    }
+}
+
+/// What the loaded driver itself thinks of the GPU, straight out of procfs.
+fn driver_view() -> Value {
+    let mut gpus = Vec::new();
+    if let Ok(entries) = fs::read_dir("/proc/driver/nvidia/gpus") {
+        for entry in entries.flatten() {
+            gpus.push(json!({
+                "pci": entry.file_name().to_string_lossy(),
+                "information": fs::read_to_string(entry.path().join("information")).unwrap_or_default(),
+            }));
+        }
+    }
+    let sys = |name: &str| {
+        fs::read_to_string(format!("/sys/bus/pci/devices/0000:01:00.0/{name}"))
+            .map(|value| value.trim().to_owned())
+            .unwrap_or_default()
+    };
+    json!({
+        "version": fs::read_to_string("/proc/driver/nvidia/version").unwrap_or_default(),
+        "gpus": gpus,
+        "power_state": sys("power_state"),
+        "runtime_status": sys("runtime_status"),
+        "current_link_speed": sys("current_link_speed"),
+        "dev_dri": fs::read_dir("/dev/dri")
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
+    })
 }
 
 fn load_modules() -> Result<Vec<String>> {
